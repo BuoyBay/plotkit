@@ -1,0 +1,33 @@
+Import plotkit
+
+Class PlotCanvas Inherits Canvas
+    Public Property Series As PlotSeries
+    Public Property Bounds As PlotBounds
+    Handle Paint(g As Graphics)
+        DrawPlot(g, Me.Series, Me.Bounds, 0.0, 0.0, g.Width, g.Height)
+    End Handle
+End Class
+
+Class PlotWindow Inherits Window
+    Handle Closed()
+        Application.Quit()
+    End Handle
+End Class
+
+Sub Main()
+    Dim series As New PlotSeries()
+    For i As Integer = 0 To 400
+        Dim x As Double = i * 0.025
+        series.Add(x, Math.Sin(x) * Math.Exp(-x * 0.12))
+    Next
+    Dim window As New PlotWindow()
+    window.Title = "PlotKit: damped sine wave"
+    window.Move(100, 100, 760, 440)
+    Dim canvas As New PlotCanvas()
+    canvas.Series = series
+    canvas.Bounds = FitPlot(series)
+    canvas.Move(10, 10, 740, 420)
+    window.AddSubview(canvas)
+    window.Show()
+    Application.Run()
+End Sub

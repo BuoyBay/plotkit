@@ -1,0 +1,197 @@
+Private Sub CheckPlotNumber(value As Double)
+    If value <> value Or Math.Abs(value) > 1.0e100 Then
+        Throw New InvalidArgumentException("Plot values must be finite and within +/-1e100")
+    End If
+End Sub
+
+''' One bounded, ordered XY series. Does not expose mutable storage.
+Public Class PlotSeries
+    Private Property mX As Array Of Double
+    Private Property mY As Array Of Double
+
+    Public Sub Add(x As Double, y As Double)
+        CheckPlotNumber(x)
+        CheckPlotNumber(y)
+        If Array.Count(mX) >= 100000 Then Throw New InvalidArgumentException("PlotSeries point limit is 100000")
+        Array.Append(mX, x)
+        Array.Append(mY, y)
+    End Sub
+
+    Public Function Count() As Integer
+        Return Array.Count(mX)
+    End Function
+
+    Public Function X(index As Integer) As Double
+        Return mX(index)
+    End Function
+
+    Public Function Y(index As Integer) As Double
+        Return mY(index)
+    End Function
+End Class
+
+''' Immutable linear axis bounds with invertible normalized coordinates.
+Public Class PlotBounds
+    Private Property mXMin As Double
+    Private Property mXMax As Double
+    Private Property mYMin As Double
+    Private Property mYMax As Double
+
+    Public Sub Constructor(xMin As Double, xMax As Double, yMin As Double, yMax As Double)
+        CheckPlotNumber(xMin)
+        CheckPlotNumber(xMax)
+        CheckPlotNumber(yMin)
+        CheckPlotNumber(yMax)
+        If xMax <= xMin Or yMax <= yMin Then Throw New InvalidArgumentException("Plot bounds must increase")
+        If xMax - xMin < 1.0e-100 Or yMax - yMin < 1.0e-100 Then Throw New InvalidArgumentException("Plot range is too small")
+        mXMin = xMin
+        mXMax = xMax
+        mYMin = yMin
+        mYMax = yMax
+    End Sub
+
+    Public Function XMin() As Double
+        Return mXMin
+    End Function
+    Public Function XMax() As Double
+        Return mXMax
+    End Function
+    Public Function YMin() As Double
+        Return mYMin
+    End Function
+    Public Function YMax() As Double
+        Return mYMax
+    End Function
+    Public Function UnitX(x As Double) As Double
+        CheckPlotNumber(x)
+        Return (x - mXMin) / (mXMax - mXMin)
+    End Function
+    Public Function UnitY(y As Double) As Double
+        CheckPlotNumber(y)
+        Return (y - mYMin) / (mYMax - mYMin)
+    End Function
+    Public Function DataX(unit As Double) As Double
+        If unit < 0.0 Or unit > 1.0 Or unit <> unit Then Throw New InvalidArgumentException("Unit coordinate must be in 0..1")
+        Return (1.0 - unit) * mXMin + unit * mXMax
+    End Function
+    Public Function DataY(unit As Double) As Double
+        If unit < 0.0 Or unit > 1.0 Or unit <> unit Then Throw New InvalidArgumentException("Unit coordinate must be in 0..1")
+        Return (1.0 - unit) * mYMin + unit * mYMax
+    End Function
+End Class
+
+''' Empty series uses 0..1; constant data expands by max(1, abs(value)*0.05).
+Public Function FitPlot(series As PlotSeries) As PlotBounds
+    If series Is Nil Then Throw New InvalidArgumentException("PlotSeries is required")
+    If series.Count() = 0 Then Return New PlotBounds(0.0, 1.0, 0.0, 1.0)
+    Dim xMin As Double = series.X(0)
+    Dim xMax As Double = xMin
+    Dim yMin As Double = series.Y(0)
+    Dim yMax As Double = yMin
+    For i As Integer = 1 To series.Count() - 1
+        xMin = Math.Min(xMin, series.X(i))
+        xMax = Math.Max(xMax, series.X(i))
+        yMin = Math.Min(yMin, series.Y(i))
+        yMax = Math.Max(yMax, series.Y(i))
+    Next
+    If xMax - xMin < 1.0e-100 Then
+        Dim padding As Double = Math.Max(1.0, Math.Abs(xMin) * 0.05)
+        xMin = Math.Max(-1.0e100, xMin - padding)
+        xMax = Math.Min(1.0e100, xMax + padding)
+    End If
+    If yMax - yMin < 1.0e-100 Then
+        Dim padding As Double = Math.Max(1.0, Math.Abs(yMin) * 0.05)
+        yMin = Math.Max(-1.0e100, yMin - padding)
+        yMax = Math.Min(1.0e100, yMax + padding)
+    End If
+    Return New PlotBounds(xMin, xMax, yMin, yMax)
+End Function
+
+''' Bounded 1/2/5 decimal tick spacing, maximum 100 ticks.
+Public Function PlotTicks(minimum As Double, maximum As Double, target As Integer = 6) As Array Of Double
+    CheckPlotNumber(minimum)
+    CheckPlotNumber(maximum)
+    If maximum <= minimum Or maximum - minimum < 1.0e-100 Then Throw New InvalidArgumentException("Tick range must increase")
+    If target < 2 Or target > 20 Then Throw New InvalidArgumentException("Tick target must be 2..20")
+    Dim raw As Double = (maximum - minimum) / (target - 1.0)
+    Dim magnitude As Double = 1.0
+    While raw < magnitude
+        magnitude /= 10.0
+    End While
+    While raw >= magnitude * 10.0
+        magnitude *= 10.0
+    End While
+    Dim ratio As Double = raw / magnitude
+    Dim stepValue As Double = magnitude
+    If ratio > 5.0 Then
+        stepValue *= 10.0
+    ElseIf ratio > 2.0 Then
+        stepValue *= 5.0
+    ElseIf ratio > 1.0 Then
+        stepValue *= 2.0
+    End If
+    Dim ticks() As Double
+    Dim first As Double = Math.Ceiling(minimum / stepValue)
+    For i As Integer = 0 To 99
+        Dim value As Double = (first + (i + 0.0)) * stepValue
+        If value > maximum Then Exit For
+        If value >= minimum Then
+            If Array.Count(ticks) = 0 Then
+                Array.Append(ticks, value)
+            ElseIf value > ticks(Array.Count(ticks) - 1) Then
+                Array.Append(ticks, value)
+            End If
+        End If
+    Next
+    Return ticks
+End Function
+
+''' Draw a linear plot into a caller-owned drawing surface; preserves state.
+Public Sub DrawPlot(g As IGraphics, series As PlotSeries, bounds As PlotBounds, left As Double, top As Double, width As Double, height As Double, scatter As Boolean = False)
+    If g Is Nil Or series Is Nil Or bounds Is Nil Then Throw New InvalidArgumentException("Drawing surface, series and bounds are required")
+    CheckPlotNumber(left)
+    CheckPlotNumber(top)
+    If width < 100.0 Or width > 100000.0 Or height < 80.0 Or height > 100000.0 Or width <> width Or height <> height Then Throw New InvalidArgumentException("Plot dimensions outside supported range")
+    Dim x As Double = left + 55.0
+    Dim y As Double = top + 12.0
+    Dim w As Double = width - 70.0
+    Dim h As Double = height - 50.0
+    g.Save()
+    Try
+        g.FillRect(left, top, width, height, Color.White)
+        g.StrokeRect(x, y, w, h, 1.0, Color.Black)
+        For Each tick As Double In PlotTicks(bounds.XMin(), bounds.XMax())
+            Dim px As Double = x + bounds.UnitX(tick) * w
+            g.DrawLine(px, y + h, px, y + h + 4.0, 1.0, Color.Black)
+            g.DrawString(String.From(tick), px - 10.0, y + h + 19.0, "Helvetica", 10.0, Color.Black)
+        Next
+        For Each tick As Double In PlotTicks(bounds.YMin(), bounds.YMax())
+            Dim py As Double = y + h - bounds.UnitY(tick) * h
+            g.DrawLine(x - 4.0, py, x, py, 1.0, Color.Black)
+            g.DrawString(String.From(tick), left + 2.0, py + 4.0, "Helvetica", 10.0, Color.Black)
+        Next
+        g.ClipToRect(x, y, w, h)
+        Dim previousInside As Boolean = False
+        Dim previousX As Double
+        Dim previousY As Double
+        For i As Integer = 0 To series.Count() - 1
+            Dim sx As Double = series.X(i)
+            Dim sy As Double = series.Y(i)
+            Dim inside As Boolean = sx >= bounds.XMin() And sx <= bounds.XMax() And sy >= bounds.YMin() And sy <= bounds.YMax()
+            If inside Then
+                Dim px As Double = x + bounds.UnitX(sx) * w
+                Dim py As Double = y + h - bounds.UnitY(sy) * h
+                If scatter Then
+                    g.FillOval(px - 2.5, py - 2.5, 5.0, 5.0, Color.Blue)
+                ElseIf previousInside Then
+                    g.DrawLine(previousX, previousY, px, py, 1.5, Color.Blue)
+                End If
+                previousX = px
+                previousY = py
+            End If
+            previousInside = inside
+        Next
+    Finally
+        g.Restore()
+    End Try
+End Sub
