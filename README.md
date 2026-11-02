@@ -1,6 +1,6 @@
 # Build XY plots with transforms, ticks and drawing models
 
-Focused linear XY plotting in pure Buoy. `Import plotkit` exposes `PlotSeries`,
+Focused linear XY plotting with no native dependencies. `Import plotkit` exposes `PlotSeries`,
 `PlotBounds`, `FitPlot`, `PlotTicks` and `DrawPlot`. No native bridge or upstream
 artwork is bundled. Inspired by [Roger Meier's DataPlot Classes](https://opensource.the-meiers.org/).
 
@@ -57,8 +57,6 @@ On your own machine, install Buoy and run:
 ```sh
 buoy ai init --both
 ```
-
-The generated agent files and editor settings stay local and are ignored by Git.
 
 ## Contributing
 

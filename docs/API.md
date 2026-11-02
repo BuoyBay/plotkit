@@ -29,5 +29,3 @@ bounds are skipped and interrupt the trace: segments crossing the viewport with
 outside endpoints are not geometrically clipped into view. Use `FitPlot` to
 include all points. Long labels may overlap. Only one series is drawn per call;
 callers needing overlays should provide their own composed renderer.
-
-Maintainers run the private validation suite before release. See the repository README for public build instructions.
