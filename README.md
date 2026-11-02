@@ -1,4 +1,4 @@
-# Build XY plots with transforms, ticks and drawing models
+# XY plots — transforms, ticks, drawing model
 
 Focused linear XY plotting with no native dependencies. `Import plotkit` exposes `PlotSeries`,
 `PlotBounds`, `FitPlot`, `PlotTicks` and `DrawPlot`. No native bridge or upstream
@@ -22,7 +22,7 @@ consumer project for reproducible installs.
 
 ## Example
 
-```buoy
+```basic
 Import plotkit
 
 Sub Main()
